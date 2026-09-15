@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ScopeType {
+  OWN
+  TEAM
+  DEPARTMENT
+  COMPANY
+  ASSIGNED
+  CAMPAIGN
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  FOLLOW_UP
+  BOOKING_REQUESTED
+  CONVERTED
+  LOST
+}
+
+enum PaymentMethod {
+  COD
+  ONLINE
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+enum AdSpendSource {
+  MANUAL
+  FACEBOOK
+  GOOGLE
+}
+
+enum TargetMetric {
+  CONFIRMED_ORDERS
+  DELIVERED_ORDERS
+  REVENUE
+  LEADS_CONVERTED
+}
+
+enum TargetStatus {
+  ON_TRACK
+  AT_RISK
+  ACHIEVED
+  MISSED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  departmentId String?
+  teamId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles              UserRole[]
+  assignedLeads      Lead[]              @relation("AssignedLeads")
+  createdLeads       Lead[]              @relation("CreatedLeads")
+  orders             Order[]             @relation("SalesOrders")
+  targets            Target[]            @relation("UserTargets")
+  reviewsReceived    PerformanceReview[] @relation("ReviewedUser")
+  reviewsGiven       PerformanceReview[] @relation("ReviewerUser")
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Permission {
+  id  String @id @default(uuid())
+  key String @unique
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  scope        ScopeType
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Lead {
+  id              String     @id @default(uuid())
+  name            String
+  phone           String
+  status          LeadStatus @default(NEW)
+  assignedSalesId String?
+  createdById     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  assignedSales User?   @relation("AssignedLeads", fields: [assignedSalesId], references: [id])
+  createdBy     User?   @relation("CreatedLeads", fields: [createdById], references: [id])
+  orders        Order[]
+}
+
+// A confirmed/delivered sale. `value` includes delivery fee (= Revenue);
+// `deliveryFee` is tracked separately so Net Sales can be computed as
+// value - deliveryFee, matching the decision already written in the README.
+model Order {
+  id            String        @id @default(uuid())
+  leadId        String?
+  salesId       String
+  status        OrderStatus   @default(PENDING)
+  value         Decimal       @db.Decimal(10, 2)
+  deliveryFee   Decimal       @default(0) @db.Decimal(10, 2)
+  paymentMethod PaymentMethod @default(COD)
+  confirmedAt   DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  lead  Lead? @relation(fields: [leadId], references: [id])
+  sales User  @relation("SalesOrders", fields: [salesId], references: [id])
+}
+
+// One row per day/campaign of spend, regardless of where it came from.
+// `source` records provenance so a report can be honest about which
+// numbers are synced vs manually entered.
+model AdSpendEntry {
+  id        String        @id @default(uuid())
+  source    AdSpendSource
+  amount    Decimal       @db.Decimal(10, 2)
+  date      DateTime
+  campaign  String?
+  createdAt DateTime      @default(now())
+}
+
+// Set by management (a specific user, or company-wide when userId is null).
+// Achievement is computed on read from Orders — never stored, so it's
+// always accurate as of "now".
+model Target {
+  id          String       @id @default(uuid())
+  userId      String?
+  metric      TargetMetric
+  targetValue Int
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime     @default(now())
+
+  user User? @relation("UserTargets", fields: [userId], references: [id])
+}
+
+// The manual half of a rating — a manager's judgement call, kept separate
+// from (and averaged with) the auto-computed achievement score.
+model PerformanceReview {
+  id            String   @id @default(uuid())
+  userId        String
+  periodStart   DateTime
+  periodEnd     DateTime
+  managerRating Int
+  note          String?
+  reviewedById  String
+  createdAt     DateTime @default(now())
+
+  user       User @relation("ReviewedUser", fields: [userId], references: [id])
+  reviewedBy User @relation("ReviewerUser", fields: [reviewedById], references: [id])
+}

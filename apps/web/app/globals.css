@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background-color: #150b29;
+  color: #f6f3fb;
+}
+
+* {
+  border-color: #35225e;
+}
+
+::selection {
+  background-color: #c9a24d;
+  color: #150b29;
+}
+
+/* Visible keyboard focus, kept everywhere instead of the browser default outline. */
+:focus-visible {
+  outline: 2px solid #c9a24d;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
